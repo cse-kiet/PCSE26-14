@@ -1,0 +1,226 @@
+===========================================================================
+  INSTRUCTION TO RUN — Comparative Analysis of YOLO Models for ISL
+  B.Tech Major Project — KIET Group of Institutions
+  Author: Sarthak Aggarwal
+===========================================================================
+
+This document explains:
+  1. Prerequisites and installation
+  2. How to train the models (yolov5s.ipynb — Google Colab)
+  3. How to run the comparative analysis (isl_yolo.ipynb — local machine)
+  4. What results are generated and in what format
+
+---------------------------------------------------------------------------
+PART 1: PREREQUISITES
+---------------------------------------------------------------------------
+
+Python version: 3.9 or higher
+
+Required packages (install once):
+
+    pip install ultralytics
+    pip install roboflow
+    pip install pandas matplotlib numpy opencv-python pillow
+    pip install torch torchvision   # or install from pytorch.org for GPU support
+
+For training on Colab (handled automatically inside yolov5s.ipynb):
+  - ultralytics, roboflow, and YOLOv5 requirements are installed inside the notebook
+  - No local GPU required for training; Google Colab provides NVIDIA Tesla T4
+
+For the analysis notebook (isl_yolo.ipynb) on your local machine:
+  - All packages above must be installed locally
+  - No GPU required; runs on CPU
+
+---------------------------------------------------------------------------
+PART 2: DOWNLOADING THE DATASET
+---------------------------------------------------------------------------
+
+The dataset is downloaded automatically inside the training notebook.
+If you need to download it manually, run the following Python code:
+
+    from roboflow import Roboflow
+    rf = Roboflow(api_key="b0GDZ81xqvvkyCK9FJlX")
+    project = rf.workspace("santosh-3mzsi").project("indian-sign-language_2024-caoli")
+    version = project.version(1)
+    dataset = version.download("yolov7")
+
+Dataset details:
+  - 2,424 annotated images
+  - 29 Indian Sign Language gesture classes
+  - Split: 88% train / 8% val / 4% test
+  - Format: YOLOv7 (compatible with YOLOv5, YOLOv8, YOLOv10)
+
+---------------------------------------------------------------------------
+PART 3: TRAINING THE MODELS (yolov5s.ipynb — Google Colab)
+---------------------------------------------------------------------------
+
+STEP 1 — Open yolov5s.ipynb in Google Colab.
+          Go to Runtime > Change runtime type > Hardware accelerator: GPU (T4).
+
+STEP 2 — Run cells in order. The notebook:
+          a. Clones the YOLOv5 repository
+          b. Installs all requirements
+          c. Downloads the ISL dataset from Roboflow
+
+STEP 3 — Training commands executed inside the notebook:
+
+  YOLOv5 nano:
+    python train.py --img 640 --batch 16 --epochs 10
+                    --data Indian-Sign-Language_2024-1/data.yaml
+                    --weights yolov5n.pt --name yolov5n_results
+
+  YOLOv5 small:
+    python train.py --img 640 --batch 16 --epochs 10
+                    --data Indian-Sign-Language_2024-1/data.yaml
+                    --weights yolov5s.pt --name yolov5s_results
+
+  (Repeat with yolov5m.pt, yolov5l.pt, yolov5x.pt for medium/large/xlarge)
+
+  Note: YOLOv8 and YOLOv10 are trained using the Ultralytics Python API:
+    from ultralytics import YOLO
+    model = YOLO("yolov8n.pt")
+    model.train(data="data.yaml", epochs=100, imgsz=640, batch=16,
+                patience=10, optimizer="AdamW", lr0=0.01,
+                name="yolov8n_results")
+
+STEP 4 — After training, the results are zipped and downloaded from Colab:
+    !zip -r yolov5n_results.zip /content/yolov5/runs/train/yolov5n_results
+
+  Download each zip file to your local machine and extract them into the
+  project folder (ISL_yolo/). The expected folder structure after extraction:
+
+    ISL_yolo/
+      yolov5n_results/content/yolov5/runs/train/yolov5n_results/
+      yolov5s_results/content/yolov5/runs/train/yolov5s_results/
+      ...
+      yolov8n_results/content/runs/detect/train6/
+      yolov8s_results/content/runs/detect/train2/
+      ...
+      yolov10n_results/content/runs/detect/yolov10n_isl_custom3/
+      yolov10s_results/content/runs/detect/yolov10s_isl_custom2/
+      ...
+
+  IMPORTANT: Do not rename these folders. The analysis notebook uses
+  hardcoded paths that match this exact structure.
+
+---------------------------------------------------------------------------
+PART 4: RUNNING THE COMPARATIVE ANALYSIS (isl_yolo.ipynb — local)
+---------------------------------------------------------------------------
+
+STEP 1 — Make sure all result folders are extracted into:
+          C:\Users\Sarthak Aggarwal\Downloads\ISL_yolo\
+          (or update base_path at the top of isl_yolo.ipynb to your path)
+
+STEP 2 — Open isl_yolo.ipynb in Jupyter Notebook, JupyterLab, or VS Code.
+
+STEP 3 — Run all cells in order (Kernel > Restart & Run All).
+
+  The notebook is organized into sections:
+    - YOLOv5 analysis
+    - YOLOv8 analysis
+    - YOLOv10 analysis
+    - Cross-version comparison (YOLOv5 vs YOLOv8 vs YOLOv10)
+    - Overall ranking with normalized scores
+
+---------------------------------------------------------------------------
+PART 5: RESULTS — FORMAT AND LOCATION
+---------------------------------------------------------------------------
+
+A. Per-Epoch Training CSV (results.csv)
+   Location: inside each model's result folder
+   Example: yolov8n_results/content/runs/detect/train6/results.csv
+
+   Columns (YOLOv5):
+     epoch, train/box_loss, train/obj_loss, train/cls_loss,
+     metrics/precision, metrics/recall, metrics/mAP_0.5,
+     metrics/mAP_0.5:0.95, val/box_loss, val/obj_loss, val/cls_loss,
+     x/lr0, x/lr1, x/lr2
+
+   Columns (YOLOv8/YOLOv10):
+     epoch, train/box_loss, train/cls_loss, train/dfl_loss,
+     metrics/precision(B), metrics/recall(B),
+     metrics/mAP50(B), metrics/mAP50-95(B),
+     val/box_loss, val/cls_loss, val/dfl_loss, lr/pg0, lr/pg1, lr/pg2
+
+   The analysis notebook strips whitespace and renames columns to a
+   unified format before comparison.
+
+B. Trained Weights (best.pt, last.pt)
+   Location: <model>_results/.../weights/
+   Format: PyTorch .pt file (can be loaded with YOLO("best.pt"))
+   best.pt = checkpoint with highest validation mAP
+   last.pt  = checkpoint from final epoch
+
+C. Visual Outputs (PNG plots) — generated inside the result folders
+   - confusion_matrix.png     — class-level detection errors
+   - P_curve.png              — Precision vs Confidence
+   - R_curve.png              — Recall vs Confidence
+   - F1_curve.png             — F1 vs Confidence
+   - PR_curve.png             — Precision vs Recall
+   - results.png              — loss and metric curves over all epochs
+   - train_batch*.jpg         — sample training batch images
+   - val_batch*_labels.jpg    — ground-truth labels on validation batch
+   - val_batch*_pred.jpg      — model predictions on validation batch
+   - labels.jpg               — class distribution
+   - labels_correlogram.jpg   — bounding box attribute correlations
+
+D. Comparative Plots — saved to the project root by isl_yolo.ipynb
+   - precision_recall_yolo_comparison.png
+       Precision vs Recall curves for all 15 models (YOLOv5, YOLOv8, YOLOv10)
+       Saved at 300 DPI.
+   - model_size_vs_map50.png
+       Scatter plot: model file size (MB) vs mAP@0.5
+       Each model version labelled; grouped by YOLO family.
+       Saved at 300 DPI.
+
+E. Final Ranking Table — printed inside isl_yolo.ipynb (not saved to file)
+   Columns: model, version, precision, recall, mAP@0.5, mAP@0.5:0.95,
+            model_size (MB), final_score (normalized 0–1)
+   Scoring: Min-Max normalization across all 5 dimensions,
+            model size is inverted (smaller = higher normalized score).
+   Top result: YOLOv8n with a normalized score of 0.9688.
+
+F. TensorBoard Logs
+   Location: events.out.tfevents.* inside each model result folder
+   To view: tensorboard --logdir <model_results_folder>
+
+---------------------------------------------------------------------------
+PART 6: USING A TRAINED MODEL FOR INFERENCE
+---------------------------------------------------------------------------
+
+Load a trained model and run prediction on an image:
+
+    from ultralytics import YOLO
+
+    model = YOLO("yolov8n_results/content/runs/detect/train6/weights/best.pt")
+    results = model.predict("your_image.jpg", imgsz=640, conf=0.25)
+    results[0].show()   # display image with bounding boxes
+
+For YOLOv5 inference (requires YOLOv5 repository cloned):
+
+    python yolov5/detect.py --weights yolov5n_results/.../best.pt
+                             --source your_image.jpg --img 640
+
+---------------------------------------------------------------------------
+PART 7: NOTES
+---------------------------------------------------------------------------
+
+- Training was done on Google Colab with NVIDIA Tesla T4 GPU.
+  Running train.py locally without a GPU is possible but very slow.
+
+- isl_yolo.ipynb is designed for local execution. It reads the downloaded
+  result CSVs and does not require Colab or a GPU.
+
+- If result folders are missing, the notebook prints a warning:
+  "Missing file for <model>: <path>" and skips that model.
+
+- The base_path variable at the top of isl_yolo.ipynb must point to the
+  folder where all *_results folders are located. Update it if you move
+  the project to a different directory.
+
+- YOLOv10 uses a dual-head architecture (one-to-many + one-to-one).
+  Its results.csv has different loss column names (box_om, cls_om,
+  box_oo, cls_oo) compared to YOLOv5/YOLOv8. The notebook handles
+  this automatically by renaming columns before comparison.
+
+===========================================================================
